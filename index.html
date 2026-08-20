@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base Fishing</title>
+    <!-- Подключаем стили и ethers.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0052FF;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: #ffffff;
+            color: #111111;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 450px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 { margin-top: 0; color: #0052FF; }
+        button {
+            background-color: #0052FF;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin: 10px 0;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0038b8; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .stats {
+            background: #f4f6f8;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: left;
+            font-size: 14px;
+        }
+        .log {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #555;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🎣 Base Fishing</h1>
+        <p>Поймай свою первую рыбу в сети Base!</p>
+
+        <button id="connectBtn" onclick="connectWallet()">Подключить MetaMask</button>
+
+        <div class="stats" id="statsBox" style="display: none;">
+            <p><b>Кошелек:</b> <span id="walletAddress">не подключен</span></p>
+            <p><b>Игровые монеты:</b> <span id="playerCoins">0</span> 🪙</p>
+        </div>
+
+        <div id="gameControls" style="display: none;">
+            <hr>
+            <h3>Действия</h3>
+            <button onclick="buyRod1()">Купить удочку 1 ур. ($0.05)</button>
+            <button onclick="fish()">🎣 Забросить удочку (Рыбалка)</button>
+            <button onclick="upgradeToRod2()">Купить удочку 2 ур. (100 монет)</button>
+            <button onclick="upgradeToRod3()">Купить удочку 3 ур. (2000 монет)</button>
+        </div>
+
+        <div class="log" id="logBox"></div>
+    </div>
+
+    <script>
+        // ЗАМЕНИ ЭТОТ АДРЕС НА АДРЕС СВОЕГО КОНТРАКТА ИЗ REMIX
+        const CONTRACT_ADDRESS = "0xF4852453F948fF512b8330e47f9d3577cDCCe36F";
+
+        const CONTRACT_ABI = [
+            "function buyRod1() external payable",
+            "function fish() external",
+            "function upgradeToRod2() external",
+            "function upgradeToRod3() external",
+            "function playerCoins(address) view returns (uint256)",
+            "function balanceOf(address account, uint256 id) view returns (uint256)"
+        ];
+
+        let provider, signer, contract;
+
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = await provider.getSigner();
+                    const address = await signer.getAddress();
+
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+                    document.getElementById("walletAddress").innerText = address.substring(0, 6) + "..." + address.substring(38);
+                    document.getElementById("connectBtn").style.display = "none";
+                    document.getElementById("statsBox").style.display = "block";
+                    document.getElementById("gameControls").style.display = "block";
+
+                    updateStats();
+                    log("Кошелек успешно подключен!");
+                } catch (error) {
+                    log("Ошибка подключения: " + error.message);
+                }
+            } else {
+                alert("Установите MetaMask!");
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const address = await signer.getAddress();
+                const coins = await contract.playerCoins(address);
+                document.getElementById("playerCoins").innerText = coins.toString();
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function buyRod1() {
+            try {
+                log("Покупка удочки 1 уровня...");
+                // 0.000017 ETH (примерно 5 центов)
+                const tx = await contract.buyRod1({ value: ethers.parseEther("0.000017") });
+                log("Транзакция отправлена, ждем подтверждения...");
+                await tx.wait();
+                log("Успешно! Удочка куплена.");
+                updateStats();
+            } catch (error) {
+                log("Ошибка: " + (error.reason || error.message));
+            }
+        }
+
+        async function fish() {
+            try {
+                log("Забросили удочку, ждем улов...");
+                const tx = await contract.fish();
+                await tx.wait();
+                log("Рыба поймана! Монеты зачислены.");
+                updateStats();
+            } catch (error) {
+                log("Ошибка: " + (error.reason || error.message));
+            }
+        }
+
+        async function upgradeToRod2() {
+            try {
+                log("Покупка удочки 2 уровня...");
+                const tx = await contract.upgradeToRod2();
+                await tx.wait();
+                log("Успешно! Удочка 2 уровня у вас.");
+                updateStats();
+            } catch (error) {
+                log("Ошибка: " + (error.reason || error.message));
+            }
+        }
+
+        async function upgradeToRod3() {
+            try {
+                log("Покупка удочки 3 уровня...");
+                const tx = await contract.upgradeToRod3();
+                await tx.wait();
+                log("Успешно! Теперь вы гребете деньги лопатой!");
+                updateStats();
+            } catch (error) {
+                log("Ошибка: " + (error.reason || error.message));
+            }
+        }
+
+        function log(message) {
+            document.getElementById("logBox").innerText = "Статус: " + message;
+        }
+    </script>
+</body>
+</html>
